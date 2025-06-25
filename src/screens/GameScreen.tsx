@@ -291,7 +291,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ navigation }) => {
       if (player) {
         // Keep player in bounds
         Body.setPosition(player, {
-          x: Math.max(0, Math.min(SCREEN_WIDTH - PLAYER_SIZE, player.position.x)),
+          x: Math.max(PLAYER_SIZE/2, Math.min(SCREEN_WIDTH - PLAYER_SIZE/2, player.position.x)),
           y: player.position.y
         });
       }
@@ -301,17 +301,42 @@ const GameScreen: React.FC<GameScreenProps> = ({ navigation }) => {
       if (now - gameState.current.lastSpawn > OPPONENT_SPAWN_RATE) {
         const world = getPhysicsWorld();
         if (world) {
+          const xPos = Math.max(OPPONENT_SIZE, Math.min(SCREEN_WIDTH - OPPONENT_SIZE, Math.random() * SCREEN_WIDTH));
           const opponent = createOpponent(
             world,
-            { x: Math.random() * SCREEN_WIDTH, y: -50 }
+            { x: xPos, y: -50 }
           );
           
           if (opponent) {
+            // Add some velocity to make opponents move down
+            Body.setVelocity(opponent, { x: 0, y: 2 });
             gameState.current.opponents.push(opponent);
             gameState.current.lastSpawn = now;
+            
+            // Make opponents move in a slight zigzag pattern
+            if (Math.random() > 0.5) {
+              Body.setVelocity(opponent, { 
+                x: (Math.random() - 0.5) * 3, 
+                y: 2 
+              });
+            }
           }
         }
       }
+      
+      // Update opponent positions
+      gameState.current.opponents.forEach(opponent => {
+        if (opponent.position.y > SCREEN_HEIGHT + 50) {
+          // Remove opponents that go off screen
+          const index = gameState.current.opponents.indexOf(opponent);
+          if (index > -1) {
+            gameState.current.opponents.splice(index, 1);
+            if (physics.current.world) {
+              World.remove(physics.current.world, opponent);
+            }
+          }
+        }
+      });
       
       // Update score based on player position
       if (player) {
@@ -388,25 +413,67 @@ const GameScreen: React.FC<GameScreenProps> = ({ navigation }) => {
     }
   }, []);
   
+  // Handle screen tap for movement
+  const handleScreenPress = (event: any) => {
+    if (!gameState.current.player || isGameOver) return;
+    
+    const touchX = event.nativeEvent.locationX;
+    const playerX = gameState.current.player.position.x;
+    const moveDistance = 100; // pixels to move
+    
+    if (touchX < playerX) {
+      // Move left
+      Body.setPosition(gameState.current.player, {
+        x: Math.max(PLAYER_SIZE/2, playerX - moveDistance),
+        y: gameState.current.player.position.y
+      });
+    } else {
+      // Move right
+      Body.setPosition(gameState.current.player, {
+        x: Math.min(SCREEN_WIDTH - PLAYER_SIZE/2, playerX + moveDistance),
+        y: gameState.current.player.position.y
+      });
+    }
+  };
+  
   // Initialize game
   const initGame = useCallback(async () => {
     try {
+      console.log('Initializing game...');
       // Initialize physics
       const { engine, world } = initPhysics();
       physics.current = { engine, world };
       
-      // Start accelerometer
-      const isAvailable = await Accelerometer.isAvailableAsync();
-      if (isAvailable) {
-        await Accelerometer.setUpdateInterval(16); // ~60fps
-        const sub = Accelerometer.addListener(accelData => {
-          setAcceleration(accelData);
-        });
-        subscriptionRef.current = { remove: sub.remove };
-        setIsAccelerometerAvailable(true);
+      // Setup player controls
+      console.log('Setting up controls...');
+      
+      // Try accelerometer first
+      try {
+        const isAvailable = await Accelerometer.isAvailableAsync();
+        if (isAvailable) {
+          console.log('Accelerometer is available');
+          await Accelerometer.setUpdateInterval(16); // ~60fps
+          const sub = Accelerometer.addListener(accelData => {
+            if (gameState.current.player && !isGameOver) {
+              const speed = 15; // Increased speed for better responsiveness
+              const newX = gameState.current.player.position.x + (accelData.x * speed);
+              Body.setPosition(gameState.current.player, {
+                x: Math.max(PLAYER_SIZE/2, Math.min(SCREEN_WIDTH - PLAYER_SIZE/2, newX)),
+                y: gameState.current.player.position.y
+              });
+            }
+          });
+          subscriptionRef.current = { remove: sub.remove };
+          setIsAccelerometerAvailable(true);
+        } else {
+          console.log('Accelerometer not available, using tap controls');
+        }
+      } catch (error) {
+        console.warn('Failed to initialize accelerometer:', error);
       }
       
       // Start game loop
+      console.log('Starting game loop...');
       startGameLoop();
       
     } catch (error) {
@@ -415,9 +482,14 @@ const GameScreen: React.FC<GameScreenProps> = ({ navigation }) => {
     }
   }, [initPhysics, startGameLoop]);
   
-  // Cleanup on unmount
+  // Initialize game when component mounts
   useEffect(() => {
+    console.log('Component mounted, initializing game...');
+    initGame();
+    
+    // Cleanup on unmount
     return () => {
+      console.log('Cleaning up...');
       isMounted.current = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -431,14 +503,38 @@ const GameScreen: React.FC<GameScreenProps> = ({ navigation }) => {
         Matter.Engine.clear(physics.current.engine);
       }
     };
-  }, []);
+  }, [initGame]);
   
+  // Define game area styles with proper typing
+  const gameAreaStyle = {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  };
+
+  const instructionsStyle = {
+    position: 'absolute' as const,
+    bottom: 50,
+    color: COLORS.WHITE,
+    fontFamily: FONTS.PRESS_START_2P,
+    fontSize: 12,
+    textAlign: 'center' as const,
+    padding: 20,
+    lineHeight: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 10,
+  };
+
   // Render game
   return (
     <ErrorBoundary>
       <SafeAreaView style={styles.container}>
         <StatusBar hidden />
-        <View style={styles.gameContainer as any}>
+        <View style={styles.gameContainer}>
           <Text style={styles.score}>Score: {score}</Text>
           {isGameOver ? (
             <View style={styles.gameOverContainer as any}>
@@ -454,11 +550,47 @@ const GameScreen: React.FC<GameScreenProps> = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.gameArea as any}>
-              <Text style={styles.instructions as any}>
-                Tilt your device to move. Avoid the opponents!
+            <TouchableOpacity 
+              activeOpacity={1} 
+              style={gameAreaStyle} 
+              onPress={handleScreenPress}
+            >
+              <Text style={instructionsStyle}>
+                Tilt your device or tap to move. Avoid the opponents!
               </Text>
-            </View>
+              {/* Render player */}
+              {gameState.current.player && (
+                <View style={{
+                  position: 'absolute',
+                  left: gameState.current.player.position.x - PLAYER_SIZE/2,
+                  top: gameState.current.player.position.y - PLAYER_SIZE/2,
+                  width: PLAYER_SIZE,
+                  height: PLAYER_SIZE,
+                  backgroundColor: 'blue',
+                  borderRadius: PLAYER_SIZE/2,
+                  borderWidth: 2,
+                  borderColor: 'white',
+                }} />
+              )}
+              
+              {/* Render opponents */}
+              {gameState.current.opponents.map((opponent, index) => (
+                <View 
+                  key={index}
+                  style={{
+                    position: 'absolute',
+                    left: opponent.position.x - OPPONENT_SIZE/2,
+                    top: opponent.position.y - OPPONENT_SIZE/2,
+                    width: OPPONENT_SIZE,
+                    height: OPPONENT_SIZE,
+                    backgroundColor: 'red',
+                    borderRadius: OPPONENT_SIZE/2,
+                    borderWidth: 2,
+                    borderColor: 'white',
+                  }}
+                />
+              ))}
+            </TouchableOpacity>
           )}
         </View>
       </SafeAreaView>
@@ -473,24 +605,32 @@ const styles = StyleSheet.create({
   },
   gameContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     position: 'relative',
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.LIGHT_GREEN,
   },
   gameArea: {
-    flex: 1,
-    width: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-  } as any, // Using 'as any' to bypass TypeScript error for now
+  },
   instructions: {
+    position: 'absolute',
+    bottom: 50,
     color: COLORS.WHITE,
     fontFamily: FONTS.PRESS_START_2P,
-    fontSize: 14,
+    fontSize: 12,
     textAlign: 'center',
     padding: 20,
-    lineHeight: 24,
-  } as any, // Using 'as any' to bypass TypeScript error for now
+    lineHeight: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 10,
+  },
   score: {
     position: 'absolute',
     top: 40,
