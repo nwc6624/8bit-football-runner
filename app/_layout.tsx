@@ -19,9 +19,13 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
+      <Stack initialRouteName="SplashScreen">
+        <Stack.Screen name="SplashScreen" options={{ headerShown: false }} />
+        <Stack.Screen name="HomeScreen" options={{ headerShown: false }} />
+        <Stack.Screen name="InstructionsScreen" options={{ headerShown: false }} />
+        <Stack.Screen name="SettingsScreen" options={{ headerShown: false }} />
+        <Stack.Screen name="GameScreen" options={{ headerShown: false }} />
+        <Stack.Screen name="GameOverScreen" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
