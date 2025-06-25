@@ -20,6 +20,40 @@ export const COLORS = {
   PEACH: '#FFCCAA',
 } as const;
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface GameEntities {
+  physics: {
+    engine: Matter.Engine;
+    world: Matter.World;
+  };
+  player: Matter.Body;
+  opponents: Matter.Body[];
+  boundaries: Matter.Body[];
+  fieldLines: Matter.Body[];
+  lastSpawn: number;
+  input: {
+    touches: any[];
+  };
+  score: number;
+  [key: string]: any; // Allow additional properties
+}
+
+export interface GameEvent {
+  type: 'gameOver';
+  score: number;
+}
+
+export type System = (entities: GameEntities, args: { 
+  time?: { current: number; delta: number };
+  touches?: any[];
+  dispatch?: (event: GameEvent) => void;
+  [key: string]: any;
+}) => GameEntities;
+
 export type RootStackParamList = {
   Home: undefined;
   Game: undefined;
