@@ -13,6 +13,7 @@ LogBox.ignoreLogs([
   'Non-serializable values were found in the navigation state',
 ]);
 
+
 // Types and constants
 import { COLORS } from './src/types';
 
