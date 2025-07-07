@@ -3,7 +3,6 @@
 An endless vertical scroller football game where you play as a 16-bit footballer trying to dodge opponents and score as many yards as possible.
 
 
-
 ## Features
 
 - 🎮 Simple one-touch controls (tilt or tap)
